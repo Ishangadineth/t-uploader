@@ -1,84 +1,106 @@
 /**
- * IDS Multi-Link Downloader (ULTIMATE VERSION)
- * Smart Fallback: yt-dlp + Multi-API
+ * IDS Multi-Link Downloader (MTProto PRO)
+ * Supports up to 2GB uploads using GramJS
  */
 
-const TelegramBot = require('node-telegram-bot-api');
+const { TelegramClient, Api } = require("telegram");
+const { StringSession } = require("telegram/sessions");
 const { exec } = require('child_process');
 const fs = require('fs-extra');
 const path = require('path');
 const axios = require('axios');
 
-const TOKEN = '8782359868:AAGLuGGwmzMkefsf8KFG4pzekkpXxalRAMU';
+// --- CREDENTIALS ---
+const apiId = 36437118;
+const apiHash = "0f5923b0fdee99f860a523ffbcb78ca5";
+const botToken = "8782359868:AAGLuGGwmzMkefsf8KFG4pzekkpXxalRAMU";
+
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
 const YTDLP_PATH = path.join(__dirname, 'yt-dlp');
-
-const bot = new TelegramBot(TOKEN, { polling: true });
 fs.ensureDirSync(DOWNLOAD_DIR);
 
-async function ensureBinaries() {
+const stringSession = new StringSession(""); // Empty for Bot Login
+
+(async () => {
+    console.log("🚀 Starting IDS MTProto Uploader...");
+    
+    const client = new TelegramClient(stringSession, apiId, apiHash, {
+        connectionRetries: 5,
+    });
+
+    await client.start({
+        botAuthToken: botToken,
+    });
+
+    console.log("✅ Bot is Online (MTProto Mode Enabled)");
+
+    // Ensure yt-dlp exists
     if (!fs.existsSync(YTDLP_PATH)) {
-        try {
-            const resp = await axios({ url: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp', method: 'GET', responseType: 'stream' });
-            const writer = fs.createWriteStream(YTDLP_PATH);
-            resp.data.pipe(writer);
-            await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
-            fs.chmodSync(YTDLP_PATH, '755');
-        } catch (e) {}
-    }
-}
-ensureBinaries();
-
-async function handleDownload(chatId, url) {
-    const waitMsg = await bot.sendMessage(chatId, "⏳ **වීඩියෝව පරීක්ෂා කරමින් පවතී...**", { parse_mode: 'Markdown' });
-    
-    // --- STEP 1: Smart Direct API for YouTube (To bypass 403) ---
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        try {
-            // Using a working public API for YouTube
-            const yResponse = await axios.post('https://api.cobalt.tools/api/json', {
-                url: url, vQuality: '720', vCodec: 'h264'
-            }, { headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' } }).catch(() => null);
-
-            if (yResponse && yResponse.data && yResponse.data.url) {
-                await bot.sendVideo(chatId, yResponse.data.url, { caption: "🎬 **YouTube Video Uploaded**" });
-                bot.deleteMessage(chatId, waitMsg.message_id);
-                return;
-            }
-        } catch (e) {}
+        console.log("📥 Downloading yt-dlp...");
+        const resp = await axios({ url: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp', method: 'GET', responseType: 'stream' });
+        const writer = fs.createWriteStream(YTDLP_PATH);
+        resp.data.pipe(writer);
+        await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
+        fs.chmodSync(YTDLP_PATH, '755');
     }
 
-    // --- STEP 2: yt-dlp for everything else ---
-    const fileName = `video_${Date.now()}.mp4`;
-    const filePath = path.join(DOWNLOAD_DIR, fileName);
-    const cmdPath = fs.existsSync(YTDLP_PATH) ? `./yt-dlp` : `yt-dlp`;
-    
-    // Updated yt-dlp command with better headers to avoid some blocks
-    const command = `${cmdPath} -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --no-check-certificate --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36" -o "${filePath}" "${url}"`;
+    // --- Message Handler ---
+    client.addEventHandler(async (event) => {
+        const message = event.message;
+        if (!message || !message.text) return;
 
-    exec(command, async (error) => {
-        if (!error) {
-            await bot.sendVideo(chatId, filePath, { caption: "🎬 **Uploaded Successfully!**" });
-            fs.removeSync(filePath);
-            bot.deleteMessage(chatId, waitMsg.message_id);
+        const text = message.text;
+        const chatId = message.chatId.toString();
+
+        if (text === "/start") {
+            await client.sendMessage(chatId, { message: "👋 **බෝට් සූදානම්!** ඕනෑම ලින්ක් එකක් එවන්න (2GB දක්වා සහය දක්වයි)." });
             return;
         }
 
-        // --- STEP 3: Last Resort Fallback (General API) ---
-        try {
-            const fbResponse = await axios.get(`https://terabox-api.vkrhost.workers.dev/api?url=${url}`);
-            if (fbResponse.data && fbResponse.data.download_url) {
-                await bot.sendDocument(chatId, fbResponse.data.download_url, { caption: "✅ **File Uploaded**" });
-                bot.deleteMessage(chatId, waitMsg.message_id);
-                return;
+        if (text.startsWith("http")) {
+            const waitMsg = await client.sendMessage(chatId, { message: "⏳ **වීඩියෝව හඳුනාගනිමින් පවතී...**" });
+            const fileName = `video_${Date.now()}.mp4`;
+            const filePath = path.join(DOWNLOAD_DIR, fileName);
+
+            // YT Fallsback for speed
+            if (text.includes('youtube.com') || text.includes('youtu.be')) {
+                try {
+                    const yResponse = await axios.post('https://api.cobalt.tools/api/json', { url: text, vQuality: '720' }, { headers: { 'Accept': 'application/json' } }).catch(() => null);
+                    if (yResponse && yResponse.data && yResponse.data.url) {
+                        await client.sendFile(chatId, { file: yResponse.data.url, caption: "🎬 **YouTube Video Uploaded**", parseMode: 'html' });
+                        await client.deleteMessages(chatId, [waitMsg.id], { revoke: true });
+                        return;
+                    }
+                } catch (e) {}
             }
-        } catch (e) {}
 
-        bot.editMessageText("❌ **කණගාටුයි, මෙම වීඩියෝව දැනට ලබා ගත නොහැක.**", { chat_id: chatId, message_id: waitMsg.message_id });
+            // yt-dlp for everything else (or if API fails)
+            const cmd = `./yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --no-check-certificate -o "${filePath}" "${text}"`;
+            
+            exec(cmd, async (error, stdout, stderr) => {
+                if (error) {
+                    await client.editMessage(chatId, { message: waitMsg.id, text: "❌ **බාගත කිරීම අසාර්ථකයි.**" });
+                    return;
+                }
+
+                await client.editMessage(chatId, { message: waitMsg.id, text: "📤 **ලොකු වීඩියෝවක් බැවින් අප්ලෝඩ් වීමට මද වෙලාවක් ගතවේ...**" });
+
+                try {
+                    // GramJS handles large files automatically using MTProto chunks
+                    await client.sendFile(chatId, {
+                        file: filePath,
+                        caption: "🎬 **Uploaded by IDS Bot (High Quality)**",
+                        workers: 4, // More workers for faster upload
+                        supportsStreaming: true,
+                    });
+                    fs.removeSync(filePath);
+                    await client.deleteMessages(chatId, [waitMsg.id], { revoke: true });
+                } catch (err) {
+                    console.error("Upload Error:", err);
+                    await client.editMessage(chatId, { message: waitMsg.id, text: "❌ **අප්ලෝඩ් කිරීමේ ගැටලුවක් මතු විය.**" });
+                }
+            });
+        }
     });
-}
 
-bot.on('message', async (msg) => {
-    if (msg.text && msg.text.startsWith('http')) await handleDownload(msg.chat.id, msg.text);
-});
-bot.onText(/\/start/, (msg) => bot.sendMessage(msg.chat.id, "👋 **බෝට් සූදානම්!** ලින්ක් එක එවන්න."));
+})();

@@ -1,16 +1,11 @@
 {
-  "name": "ids-upload-bot",
+  "name": "t-uploader",
   "version": "1.0.0",
-  "description": "Telegram All-in-One Downloader Bot",
+  "description": "Multi-Link Telegram Downloader (Large File Support)",
   "main": "uploadbot.js",
-  "scripts": {
-    "start": "node uploadbot.js"
-  },
   "dependencies": {
-    "node-telegram-bot-api": "^0.66.0",
     "axios": "^1.6.2",
-    "dotenv": "^16.3.1",
-    "form-data": "^4.0.0",
-    "fs-extra": "^11.2.0"
+    "fs-extra": "^11.2.0",
+    "telegram": "^2.19.1"
   }
 }
