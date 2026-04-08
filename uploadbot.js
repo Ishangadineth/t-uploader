@@ -1,186 +1,90 @@
 /**
- * IDS Multi-Link Downloader Bot
- * Highly Optimized for Node.js (IDX Environment)
- * Supports: TikTok, YT, Insta, FB, Mega, G-Drive, TeraBox, Direct Links
+ * IDS Multi-Link Downloader Bot (PRO Version)
+ * Optimized for IDX (Using yt-dlp)
  */
 
 const TelegramBot = require('node-telegram-bot-api');
-const axios = require('axios');
+const { exec } = require('child_process');
 const fs = require('fs-extra');
 const path = require('path');
+const axios = require('axios');
 
 // --- CONFIGURATION ---
-const TOKEN = '8782359868:AAGLuGGwmzMkefsf8KFG4pzekkpXxalRAMU'; // ඔබේ Bot Token එක මෙහි ඇතුළත් කරන්න
-const ADMIN_IDS = [8512163462]; // ඇඩ්මින් ලැයිස්තුව
+const TOKEN = '8782359868:AAGLuGGwmzMkefsf8KFG4pzekkpXxalRAMU';
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
 
-// Initialize Bot
 const bot = new TelegramBot(TOKEN, { polling: true });
-
-// Ensure download directory exists
 fs.ensureDirSync(DOWNLOAD_DIR);
 
-console.log('🚀 IDS Multi-Downloader Bot is running...');
-
-// --- HELPER FUNCTIONS ---
-
-const formatMessage = (text) => {
-    return text;
-};
-
-const sendError = (chatId, errorMsg) => {
-    bot.sendMessage(chatId, `❌ **Error:** ${errorMsg}`, { parse_mode: 'Markdown' });
-};
-
-const getFileNameFromUrl = (url) => {
-    const parts = url.split('/');
-    return parts[parts.length - 1].split('?')[0] || 'file_uploaded';
-};
+console.log('🚀 IDS Multi-Downloader (PRO) is running...');
 
 // --- DOWNLOADER LOGIC ---
 
-/**
- * Handle Social Media Links (TikTok, YT, Insta, FB, etc.)
- */
-async function handleSocialMedia(chatId, url) {
-    const waitMsg = await bot.sendMessage(chatId, "⏳ **Social Media වීඩියෝව සකස් කරමින් පවතී...**", { parse_mode: 'Markdown' });
+async function handleDownload(chatId, url) {
+    const waitMsg = await bot.sendMessage(chatId, "⏳ **වීඩියෝව හඳුනාගනිමින් පවතී...**", { parse_mode: 'Markdown' });
+    const fileName = `video_${Date.now()}.mp4`;
+    const filePath = path.join(DOWNLOAD_DIR, fileName);
 
-    try {
-        // Updated Cobalt API Request
-        const response = await axios.post('https://api.cobalt.tools/api/json', {
-            url: url,
-            vQuality: '720',
-            vCodec: 'h264',
-            isAudioOnly: false,
-            aFormat: 'mp3',
-            isNoTTWatermark: true
-        }, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
+    // yt-dlp command to get the best mp4 video
+    // We use a universal approach for all social media
+    const command = `yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${filePath}" "${url}"`;
 
-        const data = response.data;
-
-        if (data.status === 'error' || !data.url) {
-            throw new Error(data.text || "No download URL found.");
-        }
-
-        if (data.url) {
-            // Try sending as video first
-            if (data.url.includes('.mp4') || data.url.includes('.webm') || data.url.includes('.mkv')) {
-                await bot.sendVideo(chatId, data.url, {
-                    caption: `🎬 **Uploaded by IDS Bot**`,
-                    supports_streaming: true
-                });
-            } else {
-                await bot.sendDocument(chatId, data.url, {
-                    caption: `🎬 **File Uploaded!**`
-                });
-            }
-        } 
-
-        bot.deleteMessage(chatId, waitMsg.message_id);
-    } catch (error) {
-        console.error('Social Media Error:', error.response ? error.response.data : error.message);
-        bot.editMessageText(`❌ **හඳුනාගත නොහැකි ලින්ක් එකක් හෝ error එකක් සිදු වුණා.**\n\nමෙම වීඩියෝව ලබා ගැනීමට දැනට නොහැක. (සමහර විට එය Private හෝ Restricted වීඩියෝවක් විය හැක)`, {
-            chat_id: chatId,
-            message_id: waitMsg.message_id,
-            parse_mode: 'Markdown'
-        });
-    }
-}
-
-/**
- * Handle Cloud Storage & Direct Links
- */
-async function handleCloudAndDirect(chatId, url) {
-    const waitMsg = await bot.sendMessage(chatId, "⏳ **Cloud/Direct ලින්ක් එක පරීක්ෂා කරමින් පවතී...**", { parse_mode: 'Markdown' });
-
-    try {
-        // Special Handling for TeraBox (Bypass API)
-        if (url.includes('terabox') || url.includes('neardl') || url.includes('4sync')) {
-            bot.editMessageText("🔄 **TeraBox ලින්ක් එක Bypass කරමින් පවතී...**", { chat_id: chatId, message_id: waitMsg.message_id, parse_mode: 'Markdown' });
+    exec(command, async (error, stdout, stderr) => {
+        if (error) {
+            console.error('yt-dlp error:', stderr);
             
-            // Note: TeraBox bypass requires a working API. 
-            // Here we use a common public bypass structure (replace with yours if you have a private one)
-            const tbResponse = await axios.get(`https://terabox-api.vkrhost.workers.dev/api?url=${url}`);
-            if (tbResponse.data && tbResponse.data.download_url) {
-                await bot.sendDocument(chatId, tbResponse.data.download_url, {
-                    caption: `📦 **TeraBox File Uploaded!**`,
-                    parse_mode: 'Markdown'
-                });
-            } else {
-                throw new Error("TeraBox link bypass failed.");
+            // Fallback for TeraBox and others
+            if (url.includes('terabox') || url.includes('neardl')) {
+                bot.editMessageText("🔄 **TeraBox bypass කරමින් පවතී...**", { chat_id: chatId, message_id: waitMsg.message_id });
+                try {
+                    const tbResponse = await axios.get(`https://terabox-api.vkrhost.workers.dev/api?url=${url}`);
+                    if (tbResponse.data && tbResponse.data.download_url) {
+                        await bot.sendDocument(chatId, tbResponse.data.download_url, { caption: "📦 **TeraBox File**" });
+                        bot.deleteMessage(chatId, waitMsg.message_id);
+                        return;
+                    }
+                } catch (e) {}
             }
-        } 
-        // Google Drive (Direct link check)
-        else if (url.includes('drive.google.com')) {
-            const fileId = url.match(/\/d\/(.+?)\//);
-            if (fileId && fileId[1]) {
-                const directLink = `https://to-direct-link.com/api/gdrive?id=${fileId[1]}`; // Example GDrive API
-                await bot.sendDocument(chatId, directLink, { caption: "📂 **Google Drive File**" });
-            }
-        }
-        // Direct Links or Fallback
-        else {
-            await bot.sendDocument(chatId, url, {
-                caption: `✅ **Direct Link Uploaded!**`,
-                parse_mode: 'Markdown'
+
+            bot.editMessageText(`❌ **අසාර්ථකයි.**\nමෙම ලින්ක් එක දැනට ක්‍රියාත්මක නොවේ.`, {
+                chat_id: chatId,
+                message_id: waitMsg.message_id
             });
+            return;
         }
 
-        bot.deleteMessage(chatId, waitMsg.message_id);
-    } catch (error) {
-        bot.editMessageText(`❌ **අප්ලෝඩ් කිරීම අසාර්ථකයි.**\nමෙය සෘජු ලින්ක් එකක් (Direct Link) නොවිය හැක.`, {
-            chat_id: chatId,
-            message_id: waitMsg.message_id,
-            parse_mode: 'Markdown'
-        });
-    }
-}
+        bot.editMessageText("📤 **එම වීඩියෝව අප්ලෝඩ් කරමින් පවතී...**", { chat_id: chatId, message_id: waitMsg.message_id });
 
-// --- BOT COMMANDS ---
-
-bot.onText(/\/start/, (msg) => {
-    const chatId = msg.chat.id;
-    const welcomeText = `👋 **ආයුබෝවන්! මම IDS Multi-Link Downloader බෝට්.**\n\n` +
-        `මට ඕනෑම Social Media ලින්ක් එකක් හෝ Cloud ලින්ක් එකක් එවන්න. මම එය ඔබට කෙලින්ම අප්ලෝඩ් කර දෙන්නම්.\n\n` +
-        `✅ **සහාය දක්වන සේවාවන්:**\n` +
-        `• YouTube, TikTok, Facebook, Instagram\n` +
-        `• Mega, Google Drive, TeraBox\n` +
-        `• Direct Video/File Links`;
-    
-    bot.sendMessage(chatId, welcomeText, { 
-        parse_mode: 'Markdown',
-        reply_markup: {
-            inline_keyboard: [[{ text: "Support Group", url: "https://t.me/ids_movie_planet" }]]
+        try {
+            await bot.sendVideo(chatId, filePath, {
+                caption: "🎬 **Uploaded by @ids_movie_planet**",
+                supports_streaming: true
+            });
+            // Delete file after upload
+            fs.removeSync(filePath);
+            bot.deleteMessage(chatId, waitMsg.message_id);
+        } catch (uploadError) {
+            // If sendVideo fails, try sendDocument
+            try {
+                await bot.sendDocument(chatId, filePath, { caption: "🎬 **File Uploaded**" });
+                fs.removeSync(filePath);
+                bot.deleteMessage(chatId, waitMsg.message_id);
+            } catch (e) {
+                bot.editMessageText("❌ **ටෙලිග්‍රෑම් වෙත අප්ලෝඩ් කිරීමේ ගැටලුවක් මතු විය.**", { chat_id: chatId, message_id: waitMsg.message_id });
+            }
         }
     });
+}
+
+// --- COMMANDS ---
+
+bot.onText(/\/start/, (msg) => {
+    bot.sendMessage(msg.chat.id, "👋 **ආයුබෝවන්!**\nඕනෑම ලින්ක් එකක් එවන්න, මම එය බාගත කර ඔබට ලබා දෙන්නම්.\n\n(YouTube, TikTok, Instagram, FB, TeraBox and more...)", { parse_mode: 'Markdown' });
 });
 
 bot.on('message', async (msg) => {
-    const chatId = msg.chat.id;
     const text = msg.text;
-
-    if (!text || text.startsWith('/')) return;
-
-    if (text.startsWith('http')) {
-        // Social Media Domains
-        const socialDomains = ['tiktok.com', 'youtube.com', 'youtu.be', 'instagram.com', 'facebook.com', 'fb.watch', 'twitter.com', 'x.com', 'threads.net'];
-        const isSocial = socialDomains.some(domain => text.includes(domain));
-
-        if (isSocial) {
-            await handleSocialMedia(chatId, text);
-        } else {
-            await handleCloudAndDirect(chatId, text);
-        }
+    if (text && text.startsWith('http')) {
+        await handleDownload(msg.chat.id, text);
     }
-});
-
-// --- ADMIN COMMANDS ---
-bot.onText(/\/stats/, (msg) => {
-    if (!ADMIN_IDS.includes(msg.from.id)) return;
-    bot.sendMessage(msg.chat.id, "📊 **Bot Status:** Active\nEnvironment: Google IDX (Node.js)");
 });
