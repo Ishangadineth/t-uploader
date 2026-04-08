@@ -10,7 +10,7 @@ const fs = require('fs-extra');
 const path = require('path');
 
 // --- CONFIGURATION ---
-const TOKEN = '8393003084:AAHqMbGN5tNhlAPImZcdivTOAVVD8JuCskU'; // ඔබේ Bot Token එක මෙහි ඇතුළත් කරන්න
+const TOKEN = '8782359868:AAGLuGGwmzMkefsf8KFG4pzekkpXxalRAMU'; // ඔබේ Bot Token එක මෙහි ඇතුළත් කරන්න
 const ADMIN_IDS = [8512163462]; // ඇඩ්මින් ලැයිස්තුව
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
 
