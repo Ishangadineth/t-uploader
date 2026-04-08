@@ -46,11 +46,14 @@ async function handleSocialMedia(chatId, url) {
     const waitMsg = await bot.sendMessage(chatId, "⏳ **Social Media වීඩියෝව සකස් කරමින් පවතී...**", { parse_mode: 'Markdown' });
 
     try {
-        // Using Cobalt API (A very powerful open-source downloader api)
+        // Updated Cobalt API Request
         const response = await axios.post('https://api.cobalt.tools/api/json', {
             url: url,
-            videoQuality: '720',
-            filenameStyle: 'basic'
+            vQuality: '720',
+            vCodec: 'h264',
+            isAudioOnly: false,
+            aFormat: 'mp3',
+            isNoTTWatermark: true
         }, {
             headers: {
                 'Accept': 'application/json',
@@ -60,28 +63,28 @@ async function handleSocialMedia(chatId, url) {
 
         const data = response.data;
 
-        if (data.status === 'error') {
-            throw new Error(data.text);
+        if (data.status === 'error' || !data.url) {
+            throw new Error(data.text || "No download URL found.");
         }
 
         if (data.url) {
-            await bot.sendVideo(chatId, data.url, {
-                caption: `🎬 **Uploaded by IDS Bot**\n\n🔗 [Original Link](${url})`,
-                parse_mode: 'Markdown'
-            });
-        } else if (data.picker) {
-            // Some links (like TikTok slides) return multiple items
-            for (const item of data.picker) {
-                if (item.type === 'video' || item.type === 'photo') {
-                    await bot.sendDocument(chatId, item.url);
-                }
+            // Try sending as video first
+            if (data.url.includes('.mp4') || data.url.includes('.webm') || data.url.includes('.mkv')) {
+                await bot.sendVideo(chatId, data.url, {
+                    caption: `🎬 **Uploaded by IDS Bot**`,
+                    supports_streaming: true
+                });
+            } else {
+                await bot.sendDocument(chatId, data.url, {
+                    caption: `🎬 **File Uploaded!**`
+                });
             }
-        }
+        } 
 
         bot.deleteMessage(chatId, waitMsg.message_id);
     } catch (error) {
-        console.error('Social Media Error:', error);
-        bot.editMessageText(`❌ **හඳුනාගත නොහැකි ලින්ක් එකක් හෝ error එකක් සිදු වුණා.**\n\nError: ${error.message}`, {
+        console.error('Social Media Error:', error.response ? error.response.data : error.message);
+        bot.editMessageText(`❌ **හඳුනාගත නොහැකි ලින්ක් එකක් හෝ error එකක් සිදු වුණා.**\n\nමෙම වීඩියෝව ලබා ගැනීමට දැනට නොහැක. (සමහර විට එය Private හෝ Restricted වීඩියෝවක් විය හැක)`, {
             chat_id: chatId,
             message_id: waitMsg.message_id,
             parse_mode: 'Markdown'
